@@ -109,3 +109,61 @@ def predict_knn(X_query, X_train, y_train, n_classes, k,
                           votes[np.arange(len(X_query)), pred] / np.maximum(total, 1e-12),
                           0.0)
     return pred, confidence, neighbors
+
+
+# ===========================================================
+# Generación de datos (n_classes clusters gaussianos 2D)
+# ===========================================================
+def _random_means(n_classes, rng, x_min=-3.5, x_max=3.5, min_sep=2.0,
+                  max_tries=200):
+    """Sortea medias para n_classes clusters separadas al menos min_sep."""
+    means = []
+    tries = 0
+    while len(means) < n_classes and tries < max_tries:
+        m = rng.uniform(x_min, x_max, size=2)
+        if all(np.linalg.norm(m - mm) >= min_sep for mm in means):
+            means.append(m)
+        tries += 1
+    # fallback: si no logra separación, completa con grid uniforme
+    while len(means) < n_classes:
+        means.append(rng.uniform(x_min, x_max, size=2))
+    return np.array(means)
+
+
+def _random_cov(rng, sigma_lo=0.4, sigma_hi=1.0, rho_max=0.6):
+    sx = rng.uniform(sigma_lo, sigma_hi)
+    sy = rng.uniform(sigma_lo, sigma_hi)
+    rho = rng.uniform(-rho_max, rho_max)
+    return np.array([[sx ** 2,        rho * sx * sy],
+                     [rho * sx * sy,  sy ** 2]])
+
+
+def make_random_dataset(n_classes, n_train, n_test, rng=None):
+    rng = rng or RNG
+    means = _random_means(n_classes, rng)
+    covs = [_random_cov(rng) for _ in range(n_classes)]
+    Ls = [np.linalg.cholesky(c) for c in covs]
+
+    def sample_n(per_class):
+        Xs, ys = [], []
+        for c in range(n_classes):
+            n = per_class[c]
+            if n == 0:
+                continue
+            z = rng.standard_normal((n, 2))
+            Xs.append(z @ Ls[c].T + means[c])
+            ys.append(np.full(n, c, dtype=int))
+        return np.concatenate(Xs), np.concatenate(ys)
+
+    def split(total):
+        base, rem = divmod(total, n_classes)
+        return [base + (1 if i < rem else 0) for i in range(n_classes)]
+
+    X_train, y_train = sample_n(split(n_train))
+    X_test, y_test = sample_n(split(n_test))
+
+    # mezclar para no quedar con clases ordenadas
+    perm_tr = rng.permutation(len(X_train))
+    perm_te = rng.permutation(len(X_test))
+    return (X_train[perm_tr], y_train[perm_tr],
+            X_test[perm_te], y_test[perm_te])
