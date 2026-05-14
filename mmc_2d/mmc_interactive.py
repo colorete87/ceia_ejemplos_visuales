@@ -227,15 +227,148 @@ def make_random_dataset(n_per_class, rng=None):
     return X[perm], y[perm]
 
 
-if __name__ == "__main__":
-    X = np.array([[1.0, 1.0], [-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0]])
-    y = np.array([1, -1, 1, -1])
-    assert np.allclose(decision_value(X, 0, 1, 0), [1, -1, 1, -1])
-    assert abs(margin_width(1, 0) - 2.0) < 1e-9
-    assert fit_hard_margin(X, y) is not None
-    assert fit_soft_margin(X, y, C=1.0) is not None
+# ===========================================================
+# Estado global y constantes de UI
+# ===========================================================
+X_MIN, X_MAX = -5.0, 5.0
+CLASS_COLORS = ["#1f77b4", "#ff7f0e"]  # clase -1 (idx 0) / clase +1 (idx 1)
 
-    Xr, yr = make_random_dataset(20)
-    assert Xr.shape == (40, 2)
-    assert set(yr.tolist()) == {-1, 1}
-    print("mmc_2d dataset OK")
+DEFAULTS = {
+    "n_per_class": 25,
+    "classifier": "Hard",
+    "C": 1.0,
+    "beta0": 0.0, "beta1": 1.0, "beta2": -1.0,
+    "click_mode": "Agregar A",
+    "show_decision": False,
+    "show_corridor": True,
+    "show_arrows": True,
+}
+
+state = dict(DEFAULTS)
+state.update({
+    "X": np.empty((0, 2)),
+    "y": np.empty(0, dtype=int),
+    "auto_solution": None,
+    "auto_infeasible": False,
+    "drag_idx": None,
+})
+
+
+def _regenerate_data():
+    Xr, yr = make_random_dataset(state["n_per_class"], RNG)
+    state["X"] = Xr
+    state["y"] = yr
+    state["auto_solution"] = None
+    state["auto_infeasible"] = False
+
+
+# ===========================================================
+# Figura
+# ===========================================================
+fig = plt.figure(figsize=(13, 7.5))
+ax = fig.add_axes([0.27, 0.36, 0.50, 0.58])
+ax.set_aspect("equal")
+ax.set_xlim(X_MIN, X_MAX)
+ax.set_ylim(X_MIN, X_MAX)
+ax.set_xlabel("$x_1$")
+ax.set_ylabel("$x_2$")
+ax.grid(alpha=0.3)
+ax.set_title("Maximal Margin Classifier (2D)", loc="left", fontsize=10)
+
+
+def _add_group_box(x, y, w, h, label):
+    rect = Rectangle((x, y), w, h, transform=fig.transFigure,
+                     linewidth=0.9, edgecolor="#666666",
+                     facecolor="none", zorder=0)
+    fig.add_artist(rect)
+    return fig.text(x + w / 2, y + h + 0.006, label,
+                    ha="center", va="bottom", fontsize=9, weight="bold",
+                    color="#333333")
+
+
+def _safe_remove(artist):
+    try:
+        artist.remove()
+    except Exception:
+        pass
+
+
+# Artists reusables
+data_scatter = ax.scatter([], [], s=40, edgecolors="black", linewidths=0.5)
+hyperplane_line, = ax.plot([], [], color="black", lw=2.0, zorder=5)
+margin_lines = [None, None]   # las dos paralelas β·x = ±1
+
+
+def _hyperplane_xy(b0, b1, b2, level=0.0):
+    """Devuelve (xs, ys) para dibujar la recta β0+β1·x1+β2·x2 = level
+    dentro del rango [X_MIN, X_MAX]. Maneja el caso vertical (β2≈0)."""
+    if abs(b2) > 1e-6:
+        xs = np.array([X_MIN, X_MAX])
+        ys = (level - b0 - b1 * xs) / b2
+        return xs, ys
+    if abs(b1) > 1e-6:
+        ys = np.array([X_MIN, X_MAX])
+        xs = np.full_like(ys, (level - b0) / b1)
+        return xs, ys
+    return np.array([X_MIN, X_MAX]), np.array([0.0, 0.0])
+
+
+def redraw():
+    # Hiperplano del usuario
+    xs, ys = _hyperplane_xy(state["beta0"], state["beta1"], state["beta2"], level=0.0)
+    hyperplane_line.set_data(xs, ys)
+
+    # Paralelas del margen β·x = ±1
+    for ln in margin_lines:
+        _safe_remove(ln)
+    margin_lines[0] = None
+    margin_lines[1] = None
+    if abs(state["beta1"]) > 1e-9 or abs(state["beta2"]) > 1e-9:
+        for i, level in enumerate([1.0, -1.0]):
+            xs_m, ys_m = _hyperplane_xy(state["beta0"], state["beta1"],
+                                         state["beta2"], level=level)
+            ln, = ax.plot(xs_m, ys_m, color="black", lw=0.9, ls="--",
+                          alpha=0.6, zorder=4)
+            margin_lines[i] = ln
+
+    # Scatter
+    if len(state["X"]) > 0:
+        # y ∈ {-1, +1} → índice 0 / 1
+        idx = ((state["y"] + 1) // 2).astype(int)
+        colors = [CLASS_COLORS[i] for i in idx]
+        data_scatter.set_offsets(state["X"])
+        data_scatter.set_facecolors(colors)
+    else:
+        data_scatter.set_offsets(np.empty((0, 2)))
+
+    fig.canvas.draw_idle()
+
+
+# ===========================================================
+# Sliders del hiperplano
+# ===========================================================
+_add_group_box(0.025, 0.78, 0.21, 0.15, "Hiperplano")
+ax_b0 = plt.axes([0.07, 0.87, 0.16, 0.020])
+sl_b0 = Slider(ax_b0, "β₀", -5.0, 5.0, valinit=DEFAULTS["beta0"])
+ax_b1 = plt.axes([0.07, 0.83, 0.16, 0.020])
+sl_b1 = Slider(ax_b1, "β₁", -3.0, 3.0, valinit=DEFAULTS["beta1"])
+ax_b2 = plt.axes([0.07, 0.79, 0.16, 0.020])
+sl_b2 = Slider(ax_b2, "β₂", -3.0, 3.0, valinit=DEFAULTS["beta2"])
+
+
+def _on_beta(_v):
+    state["beta0"] = float(sl_b0.val)
+    state["beta1"] = float(sl_b1.val)
+    state["beta2"] = float(sl_b2.val)
+    redraw()
+
+
+sl_b0.on_changed(_on_beta)
+sl_b1.on_changed(_on_beta)
+sl_b2.on_changed(_on_beta)
+
+_regenerate_data()
+redraw()
+
+if __name__ == "__main__":
+    plt.show()
