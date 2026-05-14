@@ -568,6 +568,79 @@ btn_auto.on_clicked(_on_btn_auto)
 btn_clear_opt.on_clicked(_on_btn_clear_opt)
 # btn_reset.on_clicked se conecta en una task posterior (Task 11)
 
+# ===========================================================
+# Edición manual de puntos
+# ===========================================================
+_add_group_box(0.30, 0.04, 0.32, 0.18, "Edición")
+ax_click = plt.axes([0.32, 0.06, 0.13, 0.13])
+CLICK_MODES = ["Agregar A", "Agregar B", "Mover", "Borrar"]
+radio_click = RadioButtons(ax_click, CLICK_MODES,
+                            active=CLICK_MODES.index(DEFAULTS["click_mode"]))
+
+
+def _on_click_mode(label):
+    state["click_mode"] = label
+
+
+radio_click.on_clicked(_on_click_mode)
+
+
+def _nearest_point_idx(x, y):
+    if len(state["X"]) == 0:
+        return None
+    d2 = (state["X"][:, 0] - x) ** 2 + (state["X"][:, 1] - y) ** 2
+    return int(np.argmin(d2))
+
+
+def on_press(event):
+    if event.inaxes != ax or event.xdata is None or event.ydata is None:
+        return
+    x, y = float(event.xdata), float(event.ydata)
+    mode = state["click_mode"]
+    if mode == "Agregar A":
+        state["X"] = np.vstack([state["X"], [x, y]])
+        state["y"] = np.append(state["y"], -1)
+        state["auto_solution"] = None
+        state["auto_infeasible"] = False
+        redraw()
+    elif mode == "Agregar B":
+        state["X"] = np.vstack([state["X"], [x, y]])
+        state["y"] = np.append(state["y"], +1)
+        state["auto_solution"] = None
+        state["auto_infeasible"] = False
+        redraw()
+    elif mode == "Mover":
+        idx = _nearest_point_idx(x, y)
+        state["drag_idx"] = idx
+    elif mode == "Borrar":
+        idx = _nearest_point_idx(x, y)
+        if idx is not None:
+            state["X"] = np.delete(state["X"], idx, axis=0)
+            state["y"] = np.delete(state["y"], idx)
+            state["auto_solution"] = None
+            state["auto_infeasible"] = False
+            redraw()
+
+
+def on_motion(event):
+    if state["drag_idx"] is None:
+        return
+    if event.inaxes != ax or event.xdata is None or event.ydata is None:
+        return
+    state["X"][state["drag_idx"]] = [float(event.xdata), float(event.ydata)]
+    state["auto_solution"] = None
+    state["auto_infeasible"] = False
+    redraw()
+
+
+def on_release(_event):
+    state["drag_idx"] = None
+
+
+fig.canvas.mpl_connect("button_press_event", on_press)
+fig.canvas.mpl_connect("motion_notify_event", on_motion)
+fig.canvas.mpl_connect("button_release_event", on_release)
+
 _regenerate_data()
 redraw()
 
