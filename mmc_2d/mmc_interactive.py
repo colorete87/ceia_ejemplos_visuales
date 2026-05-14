@@ -63,13 +63,153 @@ def accuracy(X, y, b0, b1, b2):
     return float(np.mean(y_hat == y))
 
 
+# ===========================================================
+# Optimizadores QP via scipy SLSQP
+# ===========================================================
+def fit_hard_margin(X, y):
+    """Resuelve el QP del hard-margin:
+        min  ½ (β1² + β2²)
+        s.t. y_i · (β0 + β1·x_i1 + β2·x_i2) >= 1   ∀i
+
+    Devuelve dict {b0, b1, b2} o None si SLSQP no converge o las
+    constraints quedan violadas (proxy de no separabilidad).
+    """
+    if len(X) == 0:
+        return None
+    n = len(X)
+    # Variables: theta = (b0, b1, b2)
+    def obj(theta):
+        return 0.5 * (theta[1] ** 2 + theta[2] ** 2)
+    def obj_grad(theta):
+        return np.array([0.0, theta[1], theta[2]])
+
+    constraints = []
+    for i in range(n):
+        xi, yi = X[i], y[i]
+        constraints.append({
+            "type": "ineq",
+            "fun": lambda th, xi=xi, yi=yi: yi * (th[0] + th[1] * xi[0] + th[2] * xi[1]) - 1.0,
+            "jac": lambda th, xi=xi, yi=yi: np.array([yi, yi * xi[0], yi * xi[1]]),
+        })
+
+    # Punto inicial: vector entre medias de las clases, normalizado
+    mask_pos = y > 0
+    if mask_pos.any() and (~mask_pos).any():
+        mu_pos = X[mask_pos].mean(axis=0)
+        mu_neg = X[~mask_pos].mean(axis=0)
+        w0 = mu_pos - mu_neg
+        b1_0, b2_0 = w0
+        b0_0 = -0.5 * (b1_0 * (mu_pos[0] + mu_neg[0]) + b2_0 * (mu_pos[1] + mu_neg[1]))
+        theta0 = np.array([b0_0, b1_0, b2_0])
+    else:
+        theta0 = np.array([0.0, 1.0, 0.0])
+
+    res = minimize(obj, theta0, jac=obj_grad, method="SLSQP",
+                   constraints=constraints,
+                   options={"maxiter": 200, "ftol": 1e-8})
+
+    if not res.success:
+        return None
+    # Validar que las constraints se cumplan (residuos negativos = violación)
+    b0, b1, b2 = res.x
+    residuals = y * (b0 + b1 * X[:, 0] + b2 * X[:, 1]) - 1.0
+    if np.any(residuals < -1e-4):
+        return None
+    return {"b0": float(b0), "b1": float(b1), "b2": float(b2)}
+
+
+def fit_soft_margin(X, y, C):
+    """Resuelve el QP del soft-margin (SVM):
+        min  ½ (β1² + β2²) + C · Σ ξ_i
+        s.t. y_i · (β0 + β1·x_i1 + β2·x_i2) >= 1 - ξ_i
+             ξ_i >= 0
+
+    Variables = (b0, b1, b2, ξ_1, …, ξ_n). Siempre devuelve sol.
+    """
+    if len(X) == 0:
+        return None
+    n = len(X)
+
+    def obj(theta):
+        b1, b2 = theta[1], theta[2]
+        xi = theta[3:]
+        return 0.5 * (b1 ** 2 + b2 ** 2) + C * np.sum(xi)
+    def obj_grad(theta):
+        g = np.zeros_like(theta)
+        g[1] = theta[1]
+        g[2] = theta[2]
+        g[3:] = C
+        return g
+
+    constraints = []
+    for i in range(n):
+        xi_pt, yi = X[i], y[i]
+        # y_i (b0 + b1 x + b2 y) - 1 + xi_i >= 0
+        def fn_margin(th, i=i, xi_pt=xi_pt, yi=yi):
+            return yi * (th[0] + th[1] * xi_pt[0] + th[2] * xi_pt[1]) - 1.0 + th[3 + i]
+        def jac_margin(th, i=i, xi_pt=xi_pt, yi=yi):
+            g = np.zeros(3 + n)
+            g[0] = yi
+            g[1] = yi * xi_pt[0]
+            g[2] = yi * xi_pt[1]
+            g[3 + i] = 1.0
+            return g
+        constraints.append({"type": "ineq", "fun": fn_margin, "jac": jac_margin})
+        # xi_i >= 0
+        def fn_xi(th, i=i):
+            return th[3 + i]
+        def jac_xi(th, i=i):
+            g = np.zeros(3 + n)
+            g[3 + i] = 1.0
+            return g
+        constraints.append({"type": "ineq", "fun": fn_xi, "jac": jac_xi})
+
+    # Inicialización: hard-margin si factible, si no fallback a vector entre medias
+    init_hard = fit_hard_margin(X, y)
+    if init_hard is not None:
+        theta0 = np.array([init_hard["b0"], init_hard["b1"], init_hard["b2"]] + [0.0] * n)
+    else:
+        mask_pos = y > 0
+        if mask_pos.any() and (~mask_pos).any():
+            mu_pos = X[mask_pos].mean(axis=0)
+            mu_neg = X[~mask_pos].mean(axis=0)
+            w0 = mu_pos - mu_neg
+            b1_0, b2_0 = w0
+            b0_0 = -0.5 * (b1_0 * (mu_pos[0] + mu_neg[0]) + b2_0 * (mu_pos[1] + mu_neg[1]))
+            theta0 = np.array([b0_0, b1_0, b2_0] + [1.0] * n)
+        else:
+            theta0 = np.array([0.0, 1.0, 0.0] + [1.0] * n)
+
+    res = minimize(obj, theta0, jac=obj_grad, method="SLSQP",
+                   constraints=constraints,
+                   options={"maxiter": 300, "ftol": 1e-7})
+    if not res.success:
+        return None
+    b0, b1, b2 = res.x[0], res.x[1], res.x[2]
+    return {"b0": float(b0), "b1": float(b1), "b2": float(b2)}
+
+
 if __name__ == "__main__":
-    # Sanity asserts mientras desarrollamos
     X = np.array([[1.0, 1.0], [-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0]])
     y = np.array([1, -1, 1, -1])
-    # Hiperplano x1 = 0 (β0=0, β1=1, β2=0): clasifica por signo de x1
     assert np.allclose(decision_value(X, 0, 1, 0), [1, -1, 1, -1])
     assert np.allclose(signed_margin(X, y, 0, 1, 0), [1, 1, 1, 1])
     assert abs(margin_width(1, 0) - 2.0) < 1e-9
     assert accuracy(X, y, 0, 1, 0) == 1.0
-    print("mmc_2d funciones puras OK")
+
+    # Hard margin sobre 4 puntos claramente separables por x1=0
+    sol = fit_hard_margin(X, y)
+    assert sol is not None
+    # El óptimo debería tener β2 ≈ 0 y β1 con signo positivo
+    assert abs(sol["b2"]) < 0.5
+    assert sol["b1"] > 0
+
+    # Soft margin sobre los mismos
+    sol_soft = fit_soft_margin(X, y, C=1.0)
+    assert sol_soft is not None
+
+    # Datos no separables: dos puntos en el mismo lugar con clases opuestas
+    X_ns = np.array([[0.0, 0.0], [0.0, 0.0], [1.0, 1.0]])
+    y_ns = np.array([1, -1, 1])
+    assert fit_hard_margin(X_ns, y_ns) is None
+    print("mmc_2d optimizadores OK")
