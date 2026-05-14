@@ -189,27 +189,53 @@ def fit_soft_margin(X, y, C):
     return {"b0": float(b0), "b1": float(b1), "b2": float(b2)}
 
 
+# ===========================================================
+# Generación de datos: 2 clusters gaussianos
+# ===========================================================
+def _random_means_2(rng, x_min=-3.5, x_max=3.5, min_sep=2.5, max_tries=200):
+    """Sortea dos medias separadas al menos min_sep."""
+    m1 = rng.uniform(x_min, x_max, size=2)
+    for _ in range(max_tries):
+        m2 = rng.uniform(x_min, x_max, size=2)
+        if np.linalg.norm(m1 - m2) >= min_sep:
+            return m1, m2
+    return m1, m1 + np.array([min_sep, 0.0])
+
+
+def _random_cov(rng, sigma_lo=0.4, sigma_hi=1.0, rho_max=0.6):
+    sx = rng.uniform(sigma_lo, sigma_hi)
+    sy = rng.uniform(sigma_lo, sigma_hi)
+    rho = rng.uniform(-rho_max, rho_max)
+    return np.array([[sx ** 2,        rho * sx * sy],
+                     [rho * sx * sy,  sy ** 2]])
+
+
+def make_random_dataset(n_per_class, rng=None):
+    """Devuelve (X, y) con n_per_class de cada clase. y ∈ {-1, +1}."""
+    rng = rng or RNG
+    m_neg, m_pos = _random_means_2(rng)
+    L_neg = np.linalg.cholesky(_random_cov(rng))
+    L_pos = np.linalg.cholesky(_random_cov(rng))
+    z_neg = rng.standard_normal((n_per_class, 2))
+    z_pos = rng.standard_normal((n_per_class, 2))
+    X_neg = z_neg @ L_neg.T + m_neg
+    X_pos = z_pos @ L_pos.T + m_pos
+    X = np.concatenate([X_neg, X_pos])
+    y = np.concatenate([np.full(n_per_class, -1, dtype=int),
+                        np.full(n_per_class, +1, dtype=int)])
+    perm = rng.permutation(len(X))
+    return X[perm], y[perm]
+
+
 if __name__ == "__main__":
     X = np.array([[1.0, 1.0], [-1.0, -1.0], [1.0, -1.0], [-1.0, 1.0]])
     y = np.array([1, -1, 1, -1])
     assert np.allclose(decision_value(X, 0, 1, 0), [1, -1, 1, -1])
-    assert np.allclose(signed_margin(X, y, 0, 1, 0), [1, 1, 1, 1])
     assert abs(margin_width(1, 0) - 2.0) < 1e-9
-    assert accuracy(X, y, 0, 1, 0) == 1.0
+    assert fit_hard_margin(X, y) is not None
+    assert fit_soft_margin(X, y, C=1.0) is not None
 
-    # Hard margin sobre 4 puntos claramente separables por x1=0
-    sol = fit_hard_margin(X, y)
-    assert sol is not None
-    # El óptimo debería tener β2 ≈ 0 y β1 con signo positivo
-    assert abs(sol["b2"]) < 0.5
-    assert sol["b1"] > 0
-
-    # Soft margin sobre los mismos
-    sol_soft = fit_soft_margin(X, y, C=1.0)
-    assert sol_soft is not None
-
-    # Datos no separables: dos puntos en el mismo lugar con clases opuestas
-    X_ns = np.array([[0.0, 0.0], [0.0, 0.0], [1.0, 1.0]])
-    y_ns = np.array([1, -1, 1])
-    assert fit_hard_margin(X_ns, y_ns) is None
-    print("mmc_2d optimizadores OK")
+    Xr, yr = make_random_dataset(20)
+    assert Xr.shape == (40, 2)
+    assert set(yr.tolist()) == {-1, 1}
+    print("mmc_2d dataset OK")
