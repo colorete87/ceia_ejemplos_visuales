@@ -375,6 +375,22 @@ def redraw():
                           alpha=0.6, zorder=4)
             margin_lines[i] = ln
 
+    # 3b. Hiperplano óptimo (auto) como línea punteada de referencia
+    if "auto_lines" not in redraw.__dict__:
+        redraw.auto_lines = []
+    for ln in redraw.auto_lines:
+        _safe_remove(ln)
+    redraw.auto_lines = []
+    if state["auto_solution"] is not None:
+        ab0 = state["auto_solution"]["b0"]
+        ab1 = state["auto_solution"]["b1"]
+        ab2 = state["auto_solution"]["b2"]
+        if abs(ab1) > 1e-9 or abs(ab2) > 1e-9:
+            xs_a, ys_a = _hyperplane_xy(ab0, ab1, ab2, level=0.0)
+            ln, = ax.plot(xs_a, ys_a, color="#d62728", lw=1.6, ls=":",
+                          alpha=0.9, zorder=4.5)
+            redraw.auto_lines.append(ln)
+
     # 4. Scatter de datos
     if len(state["X"]) > 0:
         idx = ((state["y"] + 1) // 2).astype(int)
@@ -453,7 +469,8 @@ def _on_beta(_v):
     state["beta0"] = float(sl_b0.val)
     state["beta1"] = float(sl_b1.val)
     state["beta2"] = float(sl_b2.val)
-    redraw()
+    if not _suppress_redraw[0]:
+        redraw()
 
 
 sl_b0.on_changed(_on_beta)
@@ -488,6 +505,68 @@ def _on_C(v):
 
 radio_clf.on_clicked(_on_clf)
 sl_C.on_changed(_on_C)
+
+# ===========================================================
+# Control (Auto, Limpiar óptimo, Reset)
+# ===========================================================
+_add_group_box(0.025, 0.36, 0.21, 0.17, "Control")
+ax_btn_auto = plt.axes([0.04, 0.46, 0.18, 0.04])
+btn_auto = Button(ax_btn_auto, "Auto",
+                   color="#ffd8c2", hovercolor="#f8b690")
+ax_btn_clear = plt.axes([0.04, 0.41, 0.18, 0.04])
+btn_clear_opt = Button(ax_btn_clear, "Limpiar óptimo")
+ax_btn_reset = plt.axes([0.04, 0.36, 0.18, 0.04])
+btn_reset = Button(ax_btn_reset, "Reset todo")
+
+
+_suppress_redraw = [False]
+
+
+def _set_betas_silent(b0, b1, b2):
+    """Setea los 3 sliders sin disparar 3 redraws individuales."""
+    _suppress_redraw[0] = True
+    try:
+        sl_b0.set_val(b0)
+        sl_b1.set_val(b1)
+        sl_b2.set_val(b2)
+    finally:
+        _suppress_redraw[0] = False
+    state["beta0"] = b0
+    state["beta1"] = b1
+    state["beta2"] = b2
+
+
+def _on_btn_auto(_event):
+    if len(state["X"]) == 0:
+        return
+    if state["classifier"] == "Hard":
+        sol = fit_hard_margin(state["X"], state["y"])
+        if sol is None:
+            state["auto_infeasible"] = True
+            redraw()
+            return
+    else:
+        sol = fit_soft_margin(state["X"], state["y"], state["C"])
+        if sol is None:
+            return
+    state["auto_infeasible"] = False
+    state["auto_solution"] = sol
+    # Clamp a los rangos de los sliders para que set_val no salga del rango
+    b0c = float(np.clip(sol["b0"], -5.0, 5.0))
+    b1c = float(np.clip(sol["b1"], -3.0, 3.0))
+    b2c = float(np.clip(sol["b2"], -3.0, 3.0))
+    _set_betas_silent(b0c, b1c, b2c)
+    redraw()
+
+
+def _on_btn_clear_opt(_event):
+    state["auto_solution"] = None
+    redraw()
+
+
+btn_auto.on_clicked(_on_btn_auto)
+btn_clear_opt.on_clicked(_on_btn_clear_opt)
+# btn_reset.on_clicked se conecta en una task posterior (Task 11)
 
 _regenerate_data()
 redraw()
