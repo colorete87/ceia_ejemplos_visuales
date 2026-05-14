@@ -685,6 +685,31 @@ def _on_btn_regen(_event):
 sl_n.on_changed(_on_n)
 btn_regen.on_clicked(_on_btn_regen)
 
+# ===========================================================
+# Vista (toggles visuales)
+# ===========================================================
+_add_group_box(0.65, 0.04, 0.32, 0.18, "Vista")
+ax_check = plt.axes([0.67, 0.07, 0.28, 0.13])
+ax_check.set_facecolor("none")
+chk = CheckButtons(ax_check,
+                    ["Región de decisión", "Sombreado del margen", "Flechas a SV"],
+                    actives=[DEFAULTS["show_decision"],
+                             DEFAULTS["show_corridor"],
+                             DEFAULTS["show_arrows"]])
+
+
+def _on_check(label):
+    if label == "Región de decisión":
+        state["show_decision"] = not state["show_decision"]
+    elif label == "Sombreado del margen":
+        state["show_corridor"] = not state["show_corridor"]
+    elif label == "Flechas a SV":
+        state["show_arrows"] = not state["show_arrows"]
+    redraw()
+
+
+chk.on_clicked(_on_check)
+
 _regenerate_data()
 redraw()
 
