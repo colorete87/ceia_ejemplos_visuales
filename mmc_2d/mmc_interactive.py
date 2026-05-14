@@ -460,6 +460,35 @@ sl_b0.on_changed(_on_beta)
 sl_b1.on_changed(_on_beta)
 sl_b2.on_changed(_on_beta)
 
+# ===========================================================
+# Selector de clasificador + C
+# ===========================================================
+_add_group_box(0.025, 0.59, 0.21, 0.17, "Clasificador")
+ax_clf = plt.axes([0.04, 0.62, 0.09, 0.12])
+radio_clf = RadioButtons(ax_clf, ["Hard", "Soft"],
+                          active=["Hard", "Soft"].index(DEFAULTS["classifier"]))
+
+ax_C = plt.axes([0.16, 0.66, 0.08, 0.020])
+sl_C = Slider(ax_C, "C", -2.0, 2.0,
+              valinit=np.log10(DEFAULTS["C"]),
+              valfmt="10^%.2f")
+sl_C.set_active(DEFAULTS["classifier"] == "Soft")
+
+
+def _on_clf(label):
+    state["classifier"] = label
+    sl_C.set_active(label == "Soft")
+    state["auto_infeasible"] = False  # se recalcula al apretar Auto
+    redraw()
+
+
+def _on_C(v):
+    state["C"] = 10.0 ** float(v)
+
+
+radio_clf.on_clicked(_on_clf)
+sl_C.on_changed(_on_C)
+
 _regenerate_data()
 redraw()
 
