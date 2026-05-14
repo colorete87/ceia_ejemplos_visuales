@@ -279,6 +279,15 @@ ax.set_ylabel("$x_2$")
 ax.grid(alpha=0.3)
 ax.set_title("Maximal Margin Classifier (2D)", loc="left", fontsize=10)
 
+ax_metrics = fig.add_axes([0.80, 0.36, 0.18, 0.58])
+ax_metrics.set_xticks([])
+ax_metrics.set_yticks([])
+ax_metrics.set_facecolor("#fafafa")
+ax_metrics.set_title("Métricas", fontsize=10, weight="bold")
+metrics_text = ax_metrics.text(
+    0.04, 0.96, "", transform=ax_metrics.transAxes,
+    ha="left", va="top", fontsize=10, family="monospace",
+)
 
 def _add_group_box(x, y, w, h, label):
     rect = Rectangle((x, y), w, h, transform=fig.transFigure,
@@ -401,6 +410,29 @@ def redraw():
                 arrow_artists.append(ann)
     else:
         sv_scatter.set_offsets(np.empty((0, 2)))
+
+    # 7. Panel Métricas
+    if norm2 > 1e-9:
+        m_width = margin_width(b1, b2)
+    else:
+        m_width = float("nan")
+    n_sv = int(mask_sv.sum()) if (len(state["X"]) > 0 and norm2 > 1e-9) else 0
+    if len(state["X"]) > 0:
+        acc = accuracy(state["X"], state["y"], b0, b1, b2)
+    else:
+        acc = float("nan")
+    if state["auto_infeasible"]:
+        status = "Ø no separable"
+    else:
+        status = "OK"
+    lines = [
+        f"Margen:   {m_width:6.3f}",
+        f"‖β‖:      {np.sqrt(norm2):6.3f}",
+        f"# SV:     {n_sv:>3d}",
+        f"Accuracy: {acc:6.3f}",
+        f"Status:   {status}",
+    ]
+    metrics_text.set_text("\n".join(lines))
 
     fig.canvas.draw_idle()
 
