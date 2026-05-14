@@ -232,6 +232,10 @@ def make_random_dataset(n_per_class, rng=None):
 # ===========================================================
 X_MIN, X_MAX = -5.0, 5.0
 CLASS_COLORS = ["#1f77b4", "#ff7f0e"]  # clase -1 (idx 0) / clase +1 (idx 1)
+GRID = 100
+gxs = np.linspace(X_MIN, X_MAX, GRID)
+GX1, GX2 = np.meshgrid(gxs, gxs)
+GRID_PTS = np.column_stack([GX1.ravel(), GX2.ravel()])
 
 DEFAULTS = {
     "n_per_class": 25,
@@ -297,6 +301,11 @@ def _safe_remove(artist):
 data_scatter = ax.scatter([], [], s=40, edgecolors="black", linewidths=0.5)
 hyperplane_line, = ax.plot([], [], color="black", lw=2.0, zorder=5)
 margin_lines = [None, None]   # las dos paralelas β·x = ±1
+corridor_poly = [None]          # Polygon del sombreado
+decision_image = [None]         # AxesImage opcional
+sv_scatter = ax.scatter([], [], s=180, facecolors="none",
+                         edgecolors="black", linewidths=1.6, zorder=6)
+arrow_artists = []              # lista de FancyArrowPatch / Annotation
 
 
 def _hyperplane_xy(b0, b1, b2, level=0.0):
@@ -314,32 +323,84 @@ def _hyperplane_xy(b0, b1, b2, level=0.0):
 
 
 def redraw():
-    # Hiperplano del usuario
-    xs, ys = _hyperplane_xy(state["beta0"], state["beta1"], state["beta2"], level=0.0)
-    hyperplane_line.set_data(xs, ys)
+    b0, b1, b2 = state["beta0"], state["beta1"], state["beta2"]
+    norm2 = b1 * b1 + b2 * b2
 
-    # Paralelas del margen β·x = ±1
+    # 1. Región de decisión
+    _safe_remove(decision_image[0])
+    decision_image[0] = None
+    if state["show_decision"] and norm2 > 1e-12:
+        pred_grid = np.sign(decision_value(GRID_PTS, b0, b1, b2)).reshape(GRID, GRID)
+        from matplotlib.colors import ListedColormap
+        cmap = ListedColormap(CLASS_COLORS)
+        # Map sign -1 -> 0, +1 -> 1
+        decision_image[0] = ax.imshow(
+            ((pred_grid + 1) // 2).astype(int),
+            extent=(X_MIN, X_MAX, X_MIN, X_MAX),
+            origin="lower", cmap=cmap, alpha=0.15,
+            vmin=0, vmax=1, interpolation="nearest", zorder=0)
+
+    # 2. Sombreado del corredor del margen
+    _safe_remove(corridor_poly[0])
+    corridor_poly[0] = None
+    if state["show_corridor"] and norm2 > 1e-9:
+        xs_a, ys_a = _hyperplane_xy(b0, b1, b2, level=1.0)
+        xs_b, ys_b = _hyperplane_xy(b0, b1, b2, level=-1.0)
+        # Polígono cerrado: (a0, a1, b1, b0)
+        xs_poly = np.concatenate([xs_a, xs_b[::-1]])
+        ys_poly = np.concatenate([ys_a, ys_b[::-1]])
+        corridor_poly[0] = ax.fill(xs_poly, ys_poly,
+                                    color="#777777", alpha=0.12, zorder=1)[0]
+
+    # 3. Hiperplano + paralelas
+    xs, ys = _hyperplane_xy(b0, b1, b2, level=0.0)
+    hyperplane_line.set_data(xs, ys)
     for ln in margin_lines:
         _safe_remove(ln)
     margin_lines[0] = None
     margin_lines[1] = None
-    if abs(state["beta1"]) > 1e-9 or abs(state["beta2"]) > 1e-9:
+    if norm2 > 1e-9:
         for i, level in enumerate([1.0, -1.0]):
-            xs_m, ys_m = _hyperplane_xy(state["beta0"], state["beta1"],
-                                         state["beta2"], level=level)
+            xs_m, ys_m = _hyperplane_xy(b0, b1, b2, level=level)
             ln, = ax.plot(xs_m, ys_m, color="black", lw=0.9, ls="--",
                           alpha=0.6, zorder=4)
             margin_lines[i] = ln
 
-    # Scatter
+    # 4. Scatter de datos
     if len(state["X"]) > 0:
-        # y ∈ {-1, +1} → índice 0 / 1
         idx = ((state["y"] + 1) // 2).astype(int)
         colors = [CLASS_COLORS[i] for i in idx]
         data_scatter.set_offsets(state["X"])
         data_scatter.set_facecolors(colors)
     else:
         data_scatter.set_offsets(np.empty((0, 2)))
+
+    # 5. Support vectors
+    for a in arrow_artists:
+        _safe_remove(a)
+    arrow_artists.clear()
+    if len(state["X"]) > 0 and norm2 > 1e-9:
+        mask_sv = support_vectors_mask(state["X"], state["y"], b0, b1, b2,
+                                        state["classifier"])
+        sv_scatter.set_offsets(state["X"][mask_sv]
+                                if mask_sv.any() else np.empty((0, 2)))
+        # 6. Flechas perpendiculares desde cada SV hasta su pie en el hiperplano
+        if state["show_arrows"] and mask_sv.any():
+            X_sv = state["X"][mask_sv]
+            # Distancia firmada del SV al hiperplano (no al margen): d = (β·x) / ||β||
+            d = decision_value(X_sv, b0, b1, b2) / np.sqrt(norm2)
+            # Pie sobre el hiperplano: x_foot = x - d · (β/||β||)
+            unit = np.array([b1, b2]) / np.sqrt(norm2)
+            X_foot = X_sv - d[:, None] * unit[None, :]
+            for (x0, y0), (xf, yf) in zip(X_sv, X_foot):
+                ann = ax.annotate(
+                    "", xy=(xf, yf), xytext=(x0, y0),
+                    arrowprops=dict(arrowstyle="->", color="#555555",
+                                    lw=1.0, alpha=0.8),
+                    zorder=7)
+                arrow_artists.append(ann)
+    else:
+        sv_scatter.set_offsets(np.empty((0, 2)))
 
     fig.canvas.draw_idle()
 
