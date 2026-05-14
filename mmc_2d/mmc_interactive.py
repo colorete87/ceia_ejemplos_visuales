@@ -566,7 +566,25 @@ def _on_btn_clear_opt(_event):
 
 btn_auto.on_clicked(_on_btn_auto)
 btn_clear_opt.on_clicked(_on_btn_clear_opt)
-# btn_reset.on_clicked se conecta en una task posterior (Task 11)
+
+
+def _on_btn_reset(_event):
+    # Limpia overlays
+    state["auto_solution"] = None
+    state["auto_infeasible"] = False
+    state["drag_idx"] = None
+    # Resetea sliders y radios a defaults (sus on_changed propagan al state)
+    _set_betas_silent(DEFAULTS["beta0"], DEFAULTS["beta1"], DEFAULTS["beta2"])
+    sl_C.set_val(np.log10(DEFAULTS["C"]))
+    sl_n.set_val(DEFAULTS["n_per_class"])
+    radio_clf.set_active(["Hard", "Soft"].index(DEFAULTS["classifier"]))
+    radio_click.set_active(CLICK_MODES.index(DEFAULTS["click_mode"]))
+    # Datos frescos
+    _regenerate_data()
+    redraw()
+
+
+btn_reset.on_clicked(_on_btn_reset)
 
 # ===========================================================
 # Edición manual de puntos
@@ -640,6 +658,32 @@ def on_release(_event):
 fig.canvas.mpl_connect("button_press_event", on_press)
 fig.canvas.mpl_connect("motion_notify_event", on_motion)
 fig.canvas.mpl_connect("button_release_event", on_release)
+
+# ===========================================================
+# Datos: tamaño por clase + Regenerar
+# ===========================================================
+_add_group_box(0.025, 0.13, 0.21, 0.18, "Datos")
+ax_n = plt.axes([0.07, 0.25, 0.16, 0.020])
+sl_n = Slider(ax_n, "# por clase", 5, 100, valinit=DEFAULTS["n_per_class"],
+              valstep=1)
+ax_btn_regen = plt.axes([0.04, 0.16, 0.18, 0.04])
+btn_regen = Button(ax_btn_regen, "Regenerar datos",
+                    color="#d9f5d2", hovercolor="#b6e6a8")
+
+
+def _on_n(_v):
+    state["n_per_class"] = int(sl_n.val)
+    _regenerate_data()
+    redraw()
+
+
+def _on_btn_regen(_event):
+    _regenerate_data()
+    redraw()
+
+
+sl_n.on_changed(_on_n)
+btn_regen.on_clicked(_on_btn_regen)
 
 _regenerate_data()
 redraw()
