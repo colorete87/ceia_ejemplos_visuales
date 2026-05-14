@@ -11,6 +11,7 @@ autocontenido con su propio `pyproject.toml`, gestionado con
 | [`proceso_gausiano/`](proceso_gausiano/) | Demo interactivo de Procesos Gaussianos en 1D (regresión y funciones de adquisición). |
 | [`proceso_gausiano_2d/`](proceso_gausiano_2d/) | Misma demo extendida a 2D: `g(x)` mezcla de gaussianas bivariadas, visualización por líneas de nivel. |
 | [`knn_2d/`](knn_2d/) | k-Nearest Neighbors interactivo en 2D: dataset sintético multi-clase, métricas y pesos configurables, región de decisión, evaluación por click / test set / k-fold. |
+| [`mmc_2d/`](mmc_2d/) | Maximal Margin Classifier y SVM (soft margin) en 2D: hiperplano controlable con sliders, modo automático vía SLSQP, edición manual de puntos. |
 
 ## Cómo correr un ejemplo
 
