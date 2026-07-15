@@ -34,7 +34,7 @@ A continuación, se presentan algunos de los ejemplos más famosos y sorprendent
 
 ---
 
-## 4. La Paradoja de Simpson 🟡 *(Preferencia: Media)*
+## 4. La Paradoja de Simpson
 * Un tratamiento médico parece tener una tasa de éxito menor que otro al observar los datos agregados (hombres y mujeres combinados). Sin embargo, al segmentar los datos por género, el primer tratamiento resulta ser más efectivo tanto en hombres como en mujeres.
 * **El resultado contraintuitivo**: La relación observada en múltiples grupos de datos puede invertirse por completo al combinar los grupos.
 * **Por qué ocurre**: Se debe a la presencia de variables de confusión no controladas y a tamaños de muestra desiguales entre los grupos. Si un tratamiento se asigna de manera desproporcionada a casos más graves (o a un género con menor tasa de supervivencia base), su promedio agregado se verá penalizado artificialmente.
