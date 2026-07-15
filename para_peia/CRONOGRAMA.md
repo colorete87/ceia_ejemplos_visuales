@@ -9,16 +9,16 @@ Esta tabla lista los videos actuales de la playlist oficial para PEIA. Se utiliz
 
 | # | Título del Video (YouTube) | Duración | Clase Asignada (Propuesta) |
 | :---: | :--- | :---: | :---: |
-| 1 | Introducción a la teoría intuitiva de conjuntos | 54:28 | *[Pendiente]* |
-| 2 | Combinatoria | 11:28 | *[Pendiente]* |
-| 3 | Probabilidad | 56:34 | *[Pendiente]* |
-| 4 | Variables aleatorias Parte 1 | 1:36:07 | *[Pendiente]* |
-| 5 | Variables aleatorias 2da parte | 1:46:34 | *[Pendiente]* |
-| 6 | Estadísticos y estimadores | 46:37 | *[Pendiente]* |
-| 7 | Inferencia bayesiana | 35:40 | *[Pendiente]* |
-| 8 | Teorema central del límite | 53:53 | *[Pendiente]* |
-| 9 | Intervalos de confianza | 1:01:51 | *[Pendiente]* |
-| 10 | Inferencia estadística | 59:26 | *[Pendiente]* |
+| 1 | Introducción a la teoría intuitiva de conjuntos | 54:28 | 1? 🔴 *[Pendiente]* |
+| 2 | Combinatoria | 11:28 | 1? 🔴 *[Pendiente]* |
+| 3 | Probabilidad | 56:34 | 1? 🔴 *[Pendiente]* |
+| 4 | Variables aleatorias Parte 1 | 1:36:07 | 2? 🔴 *[Pendiente]* |
+| 5 | Variables aleatorias 2da parte | 1:46:34 | 3? 🔴 *[Pendiente]* |
+| 6 | Estadísticos y estimadores | 46:37 | 4? 🔴 *[Pendiente]* |
+| 7 | Inferencia bayesiana | 35:40 | 5? 🔴 *[Pendiente]* |
+| 8 | Teorema central del límite | 53:53 | 5? 🔴 *[Pendiente]* |
+| 9 | Intervalos de confianza | 1:01:51 | 6? 🔴 *[Pendiente]* |
+| 10 | Inferencia estadística | 59:26 | 7? 🔴 *[Pendiente]* |
 
 **Duración Total Estimada**: ~9 horas y 4 minutos.
 
